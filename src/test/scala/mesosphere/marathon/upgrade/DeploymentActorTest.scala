@@ -6,7 +6,7 @@ import akka.util.Timeout
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.readiness.ReadinessCheckExecutor
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.MesosStatusUpdateEvent
 import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.io.storage.StorageProvider
@@ -228,6 +228,7 @@ class DeploymentActorTest
 
   class Fixture {
     val tracker: TaskTracker = mock[TaskTracker]
+    val stateOpProcessor: TaskStateOpProcessor = mock[TaskStateOpProcessor]
     val queue: LaunchQueue = mock[LaunchQueue]
     val driver: SchedulerDriver = mock[SchedulerDriver]
     val scheduler: SchedulerActions = mock[SchedulerActions]
@@ -256,6 +257,7 @@ class DeploymentActorTest
         scheduler,
         plan,
         tracker,
+        stateOpProcessor,
         queue,
         storage,
         hcManager,

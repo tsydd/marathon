@@ -10,7 +10,7 @@ import mesosphere.marathon.api.v2.json.AppUpdate
 import mesosphere.marathon.core.election.ElectionService
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.{ AppTerminatedEvent, DeploymentFailed, DeploymentSuccess, LocalLeadershipEvent }
 import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.state._
@@ -39,6 +39,7 @@ class MarathonSchedulerActor private (
     deploymentRepository: DeploymentRepository,
     healthCheckManager: HealthCheckManager,
     taskTracker: TaskTracker,
+    stateOpProcessor: TaskStateOpProcessor,
     launchQueue: LaunchQueue,
     marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
     electionService: ElectionService,
@@ -161,7 +162,8 @@ class MarathonSchedulerActor private (
       val origSender = sender()
       withLockFor(appId) {
         val promise = Promise[Unit]()
-        context.actorOf(TaskKillActor.props(driver, appId, taskTracker, eventBus, taskIds, config, promise))
+        context.actorOf(TaskKillActor.props(
+          driver, appId, taskTracker, stateOpProcessor, eventBus, taskIds, config, promise))
         val res = async {
           await(promise.future)
           val app = await(appRepository.currentVersion(appId))
@@ -338,6 +340,7 @@ object MarathonSchedulerActor {
     deploymentRepository: DeploymentRepository,
     healthCheckManager: HealthCheckManager,
     taskTracker: TaskTracker,
+    stateOpProcessor: TaskStateOpProcessor,
     launchQueue: LaunchQueue,
     marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
     electionService: ElectionService,
@@ -352,6 +355,7 @@ object MarathonSchedulerActor {
       deploymentRepository,
       healthCheckManager,
       taskTracker,
+      stateOpProcessor,
       launchQueue,
       marathonSchedulerDriverHolder,
       electionService,

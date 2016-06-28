@@ -3,7 +3,7 @@ package mesosphere.marathon.upgrade
 import akka.actor.Props
 import akka.event.EventStream
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.state.PathId
 import org.apache.mesos.SchedulerDriver
 
@@ -14,6 +14,7 @@ class TaskKillActor(
     val driver: SchedulerDriver,
     val appId: PathId,
     val taskTracker: TaskTracker,
+    val stateOpProcessor: TaskStateOpProcessor,
     val eventBus: EventStream,
     tasksToKill: Iterable[Task.Id],
     val config: UpgradeConfig,
@@ -28,10 +29,11 @@ object TaskKillActor {
     driver: SchedulerDriver,
     appId: PathId,
     taskTracker: TaskTracker,
+    stateOpProcessor: TaskStateOpProcessor,
     eventBus: EventStream,
     tasksToKill: Iterable[Task.Id],
     config: UpgradeConfig,
     promise: Promise[Unit]): Props = {
-    Props(new TaskKillActor(driver, appId, taskTracker, eventBus, tasksToKill, config, promise))
+    Props(new TaskKillActor(driver, appId, taskTracker, stateOpProcessor, eventBus, tasksToKill, config, promise))
   }
 }

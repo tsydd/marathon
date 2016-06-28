@@ -2,7 +2,7 @@ package mesosphere.marathon.upgrade
 
 import akka.testkit.TestActorRef
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.MesosStatusUpdateEvent
 import mesosphere.marathon.state.{ AppDefinition, PathId }
 import mesosphere.marathon.test.{ MarathonActorSupport, Mockito }
@@ -135,12 +135,13 @@ class TaskKillActorTest
     val taskTracker: TaskTracker = mock[TaskTracker]
     val driver: SchedulerDriver = mock[SchedulerDriver]
     val config: UpgradeConfig = mock[UpgradeConfig]
+    val stateOpProcessor: TaskStateOpProcessor = mock[TaskStateOpProcessor]
 
     config.killBatchCycle returns 30.seconds
     config.killBatchSize returns 100
 
     def killActor(appId: PathId, tasks: Iterable[Task.Id], promise: Promise[Unit]) = {
-      TestActorRef[TaskKillActor](TaskKillActor.props(driver, appId, taskTracker, system.eventStream, tasks, config, promise))
+      TestActorRef[TaskKillActor](TaskKillActor.props(driver, appId, taskTracker, stateOpProcessor, system.eventStream, tasks, config, promise))
     }
   }
 }

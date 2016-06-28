@@ -8,7 +8,7 @@ import mesosphere.marathon.SchedulerActions
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.readiness.ReadinessCheckExecutor
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.{ DeploymentStatus, DeploymentStepFailure, DeploymentStepSuccess }
 import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.io.storage.StorageProvider
@@ -27,6 +27,7 @@ private class DeploymentActor(
     scheduler: SchedulerActions,
     plan: DeploymentPlan,
     taskTracker: TaskTracker,
+    stateOpProcessor: TaskStateOpProcessor,
     launchQueue: LaunchQueue,
     storage: StorageProvider,
     healthCheckManager: HealthCheckManager,
@@ -137,13 +138,14 @@ private class DeploymentActor(
 
   def killTasks(appId: PathId, tasks: Seq[Task]): Future[Unit] = {
     val promise = Promise[Unit]()
-    context.actorOf(TaskKillActor.props(driver, appId, taskTracker, eventBus, tasks.map(_.taskId), config, promise))
+    context.actorOf(TaskKillActor.props(
+      driver, appId, taskTracker, stateOpProcessor, eventBus, tasks.map(_.taskId), config, promise))
     promise.future
   }
 
   def stopApp(app: AppDefinition): Future[Unit] = {
     val promise = Promise[Unit]()
-    context.actorOf(AppStopActor.props(driver, taskTracker, eventBus, app, config, promise))
+    context.actorOf(AppStopActor.props(driver, taskTracker, stateOpProcessor, eventBus, app, config, promise))
     promise.future.andThen {
       case Success(_) => scheduler.stopApp(driver, app)
     }
@@ -182,6 +184,7 @@ object DeploymentActor {
     scheduler: SchedulerActions,
     plan: DeploymentPlan,
     taskTracker: TaskTracker,
+    stateOpProcessor: TaskStateOpProcessor,
     launchQueue: LaunchQueue,
     storage: StorageProvider,
     healthCheckManager: HealthCheckManager,
@@ -197,6 +200,7 @@ object DeploymentActor {
       scheduler,
       plan,
       taskTracker,
+      stateOpProcessor,
       launchQueue,
       storage,
       healthCheckManager,

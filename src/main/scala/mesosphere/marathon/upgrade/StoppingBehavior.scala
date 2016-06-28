@@ -3,8 +3,8 @@ package mesosphere.marathon.upgrade
 import akka.actor.{ Actor, ActorLogging, Cancellable }
 import akka.event.EventStream
 import mesosphere.marathon.TaskUpgradeCanceledException
-import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.{ Task, TaskStateOp }
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.MesosStatusUpdateEvent
 import mesosphere.marathon.state.PathId
 import mesosphere.marathon.upgrade.StoppingBehavior.KillNextBatch
@@ -23,11 +23,31 @@ trait StoppingBehavior extends Actor with ActorLogging {
   def promise: Promise[Unit]
   def taskTracker: TaskTracker
   def appId: PathId
+  def stateOpProcessor: TaskStateOpProcessor
   var idsToKill: mutable.Set[Task.Id]
   var batchKill: mutable.Queue[Task.Id] = _
   var periodicalCheck: Cancellable = _
 
+  private[this] def isLost(task: Task): Boolean = {
+    import org.apache.mesos
+    task.mesosStatus.fold(false)(_.getState == mesos.Protos.TaskState.TASK_LOST)
+  }
+
   final override def preStart(): Unit = {
+    val relevantTasks = taskTracker.appTasksLaunchedSync(appId).filter(t => idsToKill(t.taskId))
+    val (lostTasks, launchedTasks) = relevantTasks.partition(isLost)
+
+    // we only need to explicitly expunge lost tasks here. in case more tasks got lost, we'll receive a status update
+    lostTasks.foreach { t =>
+      // TODO: should we wait for the results? we couldn't really recover if an expunge fails ...
+      stateOpProcessor.process(TaskStateOp.ForceExpunge(t.taskId))
+    }
+
+    // remove all lost tasks from the list because they have been expunged
+    launchedTasks foreach { task =>
+      idsToKill - task.taskId
+    }
+
     eventBus.subscribe(self, classOf[MesosStatusUpdateEvent])
     periodicalCheck = context.system.scheduler.schedule(
       config.killBatchCycle, config.killBatchCycle, self, KillNextBatch)

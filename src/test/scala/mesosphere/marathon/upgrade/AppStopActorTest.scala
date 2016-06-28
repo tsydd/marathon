@@ -3,10 +3,10 @@ package mesosphere.marathon.upgrade
 import akka.actor.Props
 import akka.testkit.TestActorRef
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event.{ AppTerminatedEvent, HistoryActor, MesosStatusUpdateEvent }
 import mesosphere.marathon.state.{ AppDefinition, PathId, TaskFailure, TaskFailureRepository }
-import mesosphere.marathon.test.{ Mockito, MarathonActorSupport }
+import mesosphere.marathon.test.{ MarathonActorSupport, Mockito }
 import mesosphere.marathon.upgrade.StoppingBehavior.KillNextBatch
 import mesosphere.marathon.{ MarathonSpec, MarathonTestHelper, TaskUpgradeCanceledException }
 import org.apache.mesos.SchedulerDriver
@@ -203,6 +203,7 @@ class AppStopActorTest
   class Fixture {
     val driver: SchedulerDriver = mock[SchedulerDriver]
     val taskTracker: TaskTracker = mock[TaskTracker]
+    val stateOpProcessor: TaskStateOpProcessor = mock[TaskStateOpProcessor]
     val taskFailureRepository: TaskFailureRepository = mock[TaskFailureRepository]
     val config: UpgradeConfig = mock[UpgradeConfig]
     config.killBatchSize returns 10
@@ -212,6 +213,7 @@ class AppStopActorTest
       AppStopActor.props(
         driver,
         taskTracker,
+        stateOpProcessor,
         system.eventStream,
         app,
         config,

@@ -12,7 +12,7 @@ import mesosphere.marathon.core.launcher.impl.LaunchQueueTestHelper
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.readiness.ReadinessCheckExecutor
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.core.task.tracker.TaskTracker
+import mesosphere.marathon.core.task.tracker.{ TaskStateOpProcessor, TaskTracker }
 import mesosphere.marathon.event._
 import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.io.storage.StorageProvider
@@ -32,7 +32,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.{ BeforeAndAfterAll, Matchers }
 
 import scala.collection.immutable.{ Seq, Set }
-import scala.concurrent.{ ExecutionContext, Promise, Future }
+import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.concurrent.duration._
 
 class MarathonSchedulerActorTest extends MarathonActorSupport
@@ -368,6 +368,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
         deploymentRepo,
         hcManager,
         taskTracker,
+        stateOpProcessor,
         queue,
         holder,
         electionService,
@@ -436,6 +437,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
         deploymentRepo,
         hcManager,
         taskTracker,
+        stateOpProcessor,
         queue,
         holder,
         electionService,
@@ -512,6 +514,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
   var deploymentRepo: DeploymentRepository = _
   var hcManager: HealthCheckManager = _
   var taskTracker: TaskTracker = _
+  var stateOpProcessor: TaskStateOpProcessor = _
   var queue: LaunchQueue = _
   var frameworkIdUtil: FrameworkIdUtil = _
   var driver: SchedulerDriver = _
@@ -536,6 +539,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     deploymentRepo = mock[DeploymentRepository]
     hcManager = mock[HealthCheckManager]
     taskTracker = mock[TaskTracker]
+    stateOpProcessor = mock[TaskStateOpProcessor]
     queue = mock[LaunchQueue]
     frameworkIdUtil = mock[FrameworkIdUtil]
     storage = mock[StorageProvider]
@@ -547,6 +551,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     deploymentManagerProps = schedulerActions => Props(new DeploymentManager(
       repo,
       taskTracker,
+      stateOpProcessor,
       queue,
       schedulerActions,
       storage,
@@ -585,6 +590,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
         deploymentRepo,
         hcManager,
         taskTracker,
+        stateOpProcessor,
         queue,
         holder,
         electionService,
