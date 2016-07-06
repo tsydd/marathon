@@ -26,6 +26,7 @@ import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state._
 import mesosphere.marathon.upgrade.{ DeploymentManager, DeploymentPlan }
+import mesosphere.util.monitor._
 import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.mesos.MesosStateStore
 import mesosphere.util.state.zk.{ CompressionConf, ZKStore }
@@ -35,6 +36,7 @@ import org.apache.mesos.state.ZooKeeperState
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.FiniteDuration
 import scala.collection.immutable.Seq
 import scala.concurrent.Await
 import scala.reflect.ClassTag
@@ -54,6 +56,8 @@ object ModuleNames {
   final val STORE_GROUP = "GroupStore"
   final val STORE_TASK = "TaskStore"
   final val STORE_EVENT_SUBSCRIBERS = "EventSubscriberStore"
+
+  final val SCHEDULER_HEARTBEAT_MONITOR = "SchedulerHeartbeatMonitor"
 }
 
 class MarathonModule(conf: MarathonConf, http: HttpConf)
@@ -72,6 +76,7 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
     // needs to be eager to break circular dependencies
     bind(classOf[SchedulerCallbacks]).to(classOf[SchedulerCallbacksServiceAdapter]).asEagerSingleton()
 
+    bind(classOf[HeartbeatActor]).in(Scopes.SINGLETON)
     bind(classOf[MarathonSchedulerDriverHolder]).in(Scopes.SINGLETON)
     bind(classOf[SchedulerDriverFactory]).to(classOf[MesosSchedulerDriverFactory]).in(Scopes.SINGLETON)
     bind(classOf[MarathonScheduler]).in(Scopes.SINGLETON)
@@ -84,6 +89,18 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
 
     bind(classOf[Metrics]).in(Scopes.SINGLETON)
     bind(classOf[HttpEventStreamActorMetrics]).in(Scopes.SINGLETON)
+  }
+
+  @Named(ModuleNames.SCHEDULER_HEARTBEAT_MONITOR)
+  @Provides
+  @Singleton
+  def provideHeartbeatActor(system: ActorSystem): ActorRef = {
+    system.actorOf(HeartbeatActor.props(HeartbeatActor.Config(
+      "scheduler-hbm",
+      system,
+      FiniteDuration(15, TimeUnit.SECONDS), // TODO(jdef) conf.heartbeatTimeout.get.getOrElse(15 second),
+      5 // TODO(jdef) conf.missedHeartbeatsThreshold.get.getOrElse(5)
+    )), "SchedulerHeartbeatMonitor")
   }
 
   @Provides
