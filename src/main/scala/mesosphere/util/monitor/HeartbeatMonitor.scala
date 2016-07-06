@@ -1,10 +1,14 @@
 package mesosphere.util.monitor
 
+import javax.inject.Inject
+
 import akka.actor._
 import akka.event.LoggingReceive
 import scala.concurrent.duration._
 
-class HeartbeatActor(config: HeartbeatActor.Config) extends Actor {
+class HeartbeatActor @Inject() (
+    config: HeartbeatActor.Config
+) extends Actor {
 
   import HeartbeatActor._
 
