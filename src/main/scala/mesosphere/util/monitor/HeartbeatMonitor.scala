@@ -6,84 +6,61 @@ import akka.actor._
 import akka.event.LoggingReceive
 import scala.concurrent.duration._
 
+// HeartbeatActor monitors the heartbeat of some process and executes handlers for various conditions.
+// If an expected heartbeat is missed then execute an `onSkipped` handler.
+// If X number of subsequent heartbeats are missed then execute an `onFailure` handler.
+// Upon creation the actor is in an inactive state and must be sent an EventActivate message to activate.
+// Once activated the actor will monitor for EventPulse messages (these are the heartbeats).
+// The actor may be deactivated by sending it an EventDeactivate message.
 class HeartbeatActor @Inject() (
     config: HeartbeatActor.Config
 ) extends Actor {
 
   import HeartbeatActor._
 
-  private[this] var state: StateFn = stateInactive
+  def receive: Receive = stateInactive
 
-  def receive: Receive = LoggingReceive.withLabel(config.label) {
-    case e: Event =>
-      state = state(self, e)
+  def stateInactive: Receive = LoggingReceive.withLabel("inactive") {
+    case EventActivate(onSkipped, onFailure) =>
+      context.become(stateActive(StateActive(onSkipped, onFailure, resetTimer())))
+    case _ => // swallow all other event types
   }
 
-  def stateInactive: StateFn = new StateFn {
+  def stateActive(state: StateActive): Receive = LoggingReceive.withLabel("active") {
 
-    self =>
+    case EventPulse =>
+      context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer))))
 
-    def apply(actor: ActorRef, e: Event): StateFn =
-      e match {
-        case EventActivate(onSkipped, onFailure) => stateActive(actor, onSkipped, onFailure)
-        case _ => self // swallow all other event types
+    case EventSkipped =>
+      if (state.missed + 1 > config.missedHeartbeatsThreshold) {
+        state.onFailure.run
+        context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer))))
+      } else {
+        state.onSkipped.run
+        context.become(stateActive(state.copy(missed = state.missed + 1, timer = resetTimer(state.timer))))
       }
+
+    case EventDeactivate =>
+      state.timer.foreach(_.cancel)
+      context.become(stateInactive)
+
+    case EventActivate(updatedSkipped, updatedFailure) =>
+      context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer),
+        onSkipped = updatedSkipped, onFailure = updatedFailure)))
   }
 
-  def stateActive(actor: ActorRef, onSkipped: Runnable, onFailure: Runnable): StateFn = new StateFn {
+  protected def resetTimer(timer: Option[Cancellable] = None): Option[Cancellable] = {
+    import scala.concurrent.ExecutionContext.Implicits.global
 
-    self =>
-
-    var timer: Option[Cancellable] = None
-    var missed: Int = 0
-    var skippedHandler = onSkipped
-    var failureHandler = onFailure
-
-    // scalastyle:off return
-    def apply(actor: ActorRef, e: Event): StateFn = {
-      e match {
-        case EventPulse =>
-          missed = 0
-
-        case EventSkipped =>
-          missed += 1
-          if (missed > config.missedHeartbeatsThreshold) {
-            failureHandler.run
-            missed = 0
-          } else {
-            skippedHandler.run
-          }
-
-        case EventDeactivate =>
-          timer.foreach(_.cancel)
-          return stateInactive
-
-        case EventActivate(updatedSkipped, updatedFailure) =>
-          missed = 0
-          skippedHandler = updatedSkipped
-          failureHandler = updatedFailure
-      }
-
-      resetTimer(actor)
-      self
-    }
-    // scalastyle:on return
-
-    def resetTimer(actor: ActorRef): Unit = {
-      import scala.concurrent.ExecutionContext.Implicits.global
-
-      timer.foreach(_.cancel)
-      timer = Some(config.system.scheduler.scheduleOnce(config.heartbeatTimeout, actor, EventSkipped))
-    }
-
-    resetTimer(actor)
+    // cancel current timer (if any) and send EventSkipped after duration specified by heartbeatTimeout
+    timer.foreach(_.cancel)
+    Some(config.system.scheduler.scheduleOnce(config.heartbeatTimeout, self, EventSkipped))
   }
 }
 
 object HeartbeatActor {
 
   case class Config(
-    label: String,
     system: ActorSystem,
     heartbeatTimeout: FiniteDuration,
     missedHeartbeatsThreshold: Int)
@@ -94,7 +71,11 @@ object HeartbeatActor {
   case object EventDeactivate extends Event
   case class EventActivate(heartbeatSkippedAction: Runnable, heartbeatFailureAction: Runnable) extends Event
 
-  trait StateFn extends Function2[ActorRef, Event, StateFn]
+  case class StateActive(
+    onSkipped: Runnable,
+    onFailure: Runnable,
+    timer: Option[Cancellable] = None,
+    missed: Int = 0)
 
   def props(config: Config): Props = Props(classOf[HeartbeatActor], config)
 }

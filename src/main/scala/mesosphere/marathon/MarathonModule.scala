@@ -95,7 +95,6 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
   @Singleton
   def provideHeartbeatActor(system: ActorSystem): ActorRef = {
     system.actorOf(HeartbeatActor.props(HeartbeatActor.Config(
-      "scheduler-hbm",
       system,
       FiniteDuration(15, TimeUnit.SECONDS), // TODO(jdef) conf.heartbeatTimeout.get.getOrElse(15 second),
       5 // TODO(jdef) conf.missedHeartbeatsThreshold.get.getOrElse(5)
