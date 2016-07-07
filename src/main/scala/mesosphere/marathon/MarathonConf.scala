@@ -345,8 +345,8 @@ trait MarathonConf
 
   lazy val mesosHeartbeatFailureThreshold = opt[Int](
     "mesos_heartbeat_failure_threshold",
-    descr = "(milliseconds) after missing this number of expected communications from the " +
-      "mesos master, infer that marathon has become disconnected from the master.",
+    descr = "after missing this number of expected communications from the mesos master, " +
+      "infer that marathon has become disconnected from the master.",
     noshort = true,
     hidden = true,
     default = Some(5))
