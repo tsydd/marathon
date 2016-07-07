@@ -96,8 +96,8 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
   def provideHeartbeatActor(system: ActorSystem): ActorRef = {
     system.actorOf(HeartbeatActor.props(HeartbeatActor.Config(
       system,
-      FiniteDuration(15, TimeUnit.SECONDS), // TODO(jdef) conf.heartbeatTimeout.get.getOrElse(15 second),
-      5 // TODO(jdef) conf.missedHeartbeatsThreshold.get.getOrElse(5)
+      FiniteDuration(conf.mesosHeartbeatInterval.get.getOrElse(15000L), TimeUnit.MILLISECONDS),
+      conf.mesosHeartbeatFailureThreshold.get.getOrElse(5)
     )), "SchedulerHeartbeatMonitor")
   }
 
