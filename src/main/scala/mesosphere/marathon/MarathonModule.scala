@@ -32,6 +32,7 @@ import mesosphere.util.state.mesos.MesosStateStore
 import mesosphere.util.state.zk.{ CompressionConf, ZKStore }
 import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil, PersistentStore, _ }
 import mesosphere.util.{ CapConcurrentExecutions, CapConcurrentExecutionsMetrics }
+import org.apache.mesos.Scheduler
 import org.apache.mesos.state.ZooKeeperState
 import org.slf4j.LoggerFactory
 
@@ -57,7 +58,7 @@ object ModuleNames {
   final val STORE_TASK = "TaskStore"
   final val STORE_EVENT_SUBSCRIBERS = "EventSubscriberStore"
 
-  final val SCHEDULER_HEARTBEAT_MONITOR = "SchedulerHeartbeatMonitor"
+  final val MESOS_HEARTBEAT_MONITOR = "MesosHeartbeatActor"
 }
 
 class MarathonModule(conf: MarathonConf, http: HttpConf)
@@ -76,9 +77,16 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
     // needs to be eager to break circular dependencies
     bind(classOf[SchedulerCallbacks]).to(classOf[SchedulerCallbacksServiceAdapter]).asEagerSingleton()
 
+    // MesosHeartbeatMonitor decorates MarathonScheduler
+    bind(classOf[Scheduler]).to(classOf[MesosHeartbeatMonitor]).in(Scopes.SINGLETON)
+    bind(classOf[Scheduler])
+      .annotatedWith(Names.named(MesosHeartbeatMonitor.BASE))
+      .to(classOf[MarathonScheduler])
+      .in(Scopes.SINGLETON)
+    bind(classOf[MarathonScheduler]).in(Scopes.SINGLETON)
+
     bind(classOf[MarathonSchedulerDriverHolder]).in(Scopes.SINGLETON)
     bind(classOf[SchedulerDriverFactory]).to(classOf[MesosSchedulerDriverFactory]).in(Scopes.SINGLETON)
-    bind(classOf[MarathonScheduler]).in(Scopes.SINGLETON)
     bind(classOf[MarathonSchedulerService]).in(Scopes.SINGLETON)
     bind(classOf[HealthCheckManager]).to(classOf[MarathonHealthCheckManager]).asEagerSingleton()
 
@@ -90,7 +98,7 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
     bind(classOf[HttpEventStreamActorMetrics]).in(Scopes.SINGLETON)
   }
 
-  @Named(ModuleNames.SCHEDULER_HEARTBEAT_MONITOR)
+  @Named(ModuleNames.MESOS_HEARTBEAT_MONITOR)
   @Provides
   @Singleton
   def provideHeartbeatActor(system: ActorSystem): ActorRef = {
@@ -98,7 +106,7 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
       system,
       FiniteDuration(conf.mesosHeartbeatInterval.get.getOrElse(15000L), TimeUnit.MILLISECONDS),
       conf.mesosHeartbeatFailureThreshold.get.getOrElse(5)
-    )), "SchedulerHeartbeatMonitor")
+    )), ModuleNames.MESOS_HEARTBEAT_MONITOR)
   }
 
   @Provides

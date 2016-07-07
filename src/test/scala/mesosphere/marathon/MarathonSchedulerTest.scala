@@ -10,7 +10,6 @@ import mesosphere.marathon.core.task.update.TaskStatusUpdateProcessor
 import mesosphere.marathon.event.{ SchedulerDisconnectedEvent, SchedulerRegisteredEvent, SchedulerReregisteredEvent }
 import mesosphere.marathon.state.AppRepository
 import mesosphere.marathon.test.{ MarathonActorSupport, Mockito }
-import mesosphere.util.monitor.HeartbeatActor
 import mesosphere.util.state.{ FrameworkIdUtil, MesosLeaderInfo, MutableMesosLeaderInfo }
 import org.apache.mesos.Protos._
 import org.apache.mesos.SchedulerDriver
@@ -19,7 +18,6 @@ import org.scalatest.{ BeforeAndAfterAll, GivenWhenThen, Matchers }
 class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with BeforeAndAfterAll with Mockito with Matchers with GivenWhenThen {
 
   var probe: TestProbe = _
-  var heartbeatMonitor: TestProbe = _
   var repo: AppRepository = _
   var queue: LaunchQueue = _
   var scheduler: MarathonScheduler = _
@@ -39,7 +37,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     mesosLeaderInfo.onNewMasterInfo(MasterInfo.getDefaultInstance)
     config = MarathonTestHelper.defaultConfig(maxTasksPerOffer = 10)
     probe = TestProbe()
-    heartbeatMonitor = TestProbe()
     eventBus = system.eventStream
     taskStatusProcessor = mock[TaskStatusUpdateProcessor]
     scheduler = new MarathonScheduler(
@@ -53,8 +50,7 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
       config,
       new SchedulerCallbacks {
         override def disconnected(): Unit = {}
-      },
-      heartbeatMonitor.ref
+      }
     ) {
       override protected def suicide(removeFrameworkId: Boolean): Unit = {
         suicideFn(removeFrameworkId)
@@ -89,8 +85,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     } finally {
       eventBus.unsubscribe(probe.ref)
     }
-
-    heartbeatMonitor.expectMsgType[HeartbeatActor.MessageActivate]
   }
 
   test("Publishes event when reregistered") {
@@ -115,8 +109,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     } finally {
       eventBus.unsubscribe(probe.ref)
     }
-
-    heartbeatMonitor.expectMsgType[HeartbeatActor.MessageActivate]
   }
 
   // Currently does not work because of the injection used in MarathonScheduler.callbacks
@@ -134,8 +126,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     } finally {
       eventBus.unsubscribe(probe.ref)
     }
-
-    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Suicide with an unknown error will not remove the framework id") {
@@ -150,8 +140,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     Then("Suicide is called without removing the framework id")
     suicideCall should be(defined)
     suicideCall.get should be (false)
-
-    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Suicide with a framework error will remove the framework id") {
@@ -166,7 +154,5 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     Then("Suicide is called with removing the framework id")
     suicideCall should be(defined)
     suicideCall.get should be (true)
-
-    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 }

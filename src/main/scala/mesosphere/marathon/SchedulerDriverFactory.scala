@@ -4,7 +4,7 @@ import javax.inject.Inject
 
 import mesosphere.chaos.http.HttpConf
 import mesosphere.util.state.FrameworkIdUtil
-import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.{ Scheduler, SchedulerDriver }
 
 trait SchedulerDriverFactory {
   def createDriver(): SchedulerDriver
@@ -15,7 +15,7 @@ class MesosSchedulerDriverFactory @Inject() (
   config: MarathonConf,
   httpConfig: HttpConf,
   frameworkIdUtil: FrameworkIdUtil,
-  scheduler: MarathonScheduler)
+  scheduler: Scheduler)
 
     extends SchedulerDriverFactory {
 
