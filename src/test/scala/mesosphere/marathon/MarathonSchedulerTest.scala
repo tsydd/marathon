@@ -90,7 +90,7 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
       eventBus.unsubscribe(probe.ref)
     }
 
-    heartbeatMonitor.expectMsgType[HeartbeatActor.EventActivate]
+    heartbeatMonitor.expectMsgType[HeartbeatActor.MessageActivate]
   }
 
   test("Publishes event when reregistered") {
@@ -116,7 +116,7 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
       eventBus.unsubscribe(probe.ref)
     }
 
-    heartbeatMonitor.expectMsgType[HeartbeatActor.EventActivate]
+    heartbeatMonitor.expectMsgType[HeartbeatActor.MessageActivate]
   }
 
   // Currently does not work because of the injection used in MarathonScheduler.callbacks
@@ -135,7 +135,7 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
       eventBus.unsubscribe(probe.ref)
     }
 
-    assert(HeartbeatActor.EventDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Event])
+    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Suicide with an unknown error will not remove the framework id") {
@@ -151,7 +151,7 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     suicideCall should be(defined)
     suicideCall.get should be (false)
 
-    assert(HeartbeatActor.EventDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Event])
+    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Suicide with a framework error will remove the framework id") {
@@ -167,6 +167,6 @@ class MarathonSchedulerTest extends MarathonActorSupport with MarathonSpec with 
     suicideCall should be(defined)
     suicideCall.get should be (true)
 
-    assert(HeartbeatActor.EventDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Event])
+    assert(HeartbeatActor.MessageDeactivate == heartbeatMonitor.expectMsgType[HeartbeatActor.Message])
   }
 }

@@ -1,60 +1,55 @@
 package mesosphere.util.monitor
 
-import javax.inject.Inject
-
 import akka.actor._
 import akka.event.LoggingReceive
 import scala.concurrent.duration._
 
 // HeartbeatActor monitors the heartbeat of some process and executes handlers for various conditions.
-// If an expected heartbeat is missed then execute an `onSkipped` handler.
-// If X number of subsequent heartbeats are missed then execute an `onFailure` handler.
-// Upon creation the actor is in an inactive state and must be sent an EventActivate message to activate.
-// Once activated the actor will monitor for EventPulse messages (these are the heartbeats).
-// The actor may be deactivated by sending it an EventDeactivate message.
-class HeartbeatActor @Inject() (
-    config: HeartbeatActor.Config
-) extends Actor {
+// If an expected heartbeat is missed then execute an `onSkip` handler.
+// If X number of subsequent heartbeats are missed then execute an `onFailure` handler and become inactive.
+// Upon creation the actor is in an inactive state and must be sent a MessageActivate message to activate.
+// Once activated the actor will monitor for MessagePulse messages (these are the heartbeats).
+// The actor may be forcefully deactivated by sending it an MessageDeactivate message.
+class HeartbeatActor(config: HeartbeatActor.Config) extends Actor with ActorLogging {
 
   import HeartbeatActor._
 
   def receive: Receive = stateInactive
 
   def stateInactive: Receive = LoggingReceive.withLabel("inactive") {
-    case EventActivate(onSkipped, onFailure) =>
-      context.become(stateActive(StateActive(onSkipped, onFailure, resetTimer())))
+    case MessageActivate(reactor) =>
+      context.become(stateActive(StateActive(reactor, resetTimer())))
     case _ => // swallow all other event types
   }
 
   def stateActive(state: StateActive): Receive = LoggingReceive.withLabel("active") {
 
-    case EventPulse =>
+    case MessagePulse =>
       context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer))))
 
-    case EventSkipped =>
+    case MessageSkipped =>
       if (state.missed + 1 > config.missedHeartbeatsThreshold) {
-        state.onFailure.run
-        context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer))))
+        state.reactor.onFailure
+        context.become(stateInactive)
       } else {
-        state.onSkipped.run
+        state.reactor.onSkip
         context.become(stateActive(state.copy(missed = state.missed + 1, timer = resetTimer(state.timer))))
       }
 
-    case EventDeactivate =>
+    case MessageDeactivate =>
       state.timer.foreach(_.cancel)
       context.become(stateInactive)
 
-    case EventActivate(updatedSkipped, updatedFailure) =>
-      context.become(stateActive(state.copy(missed = 0, timer = resetTimer(state.timer),
-        onSkipped = updatedSkipped, onFailure = updatedFailure)))
+    case MessageActivate(newReactor) =>
+      context.become(stateActive(StateActive(timer = resetTimer(state.timer), reactor = newReactor)))
   }
 
   protected def resetTimer(timer: Option[Cancellable] = None): Option[Cancellable] = {
     import scala.concurrent.ExecutionContext.Implicits.global
 
-    // cancel current timer (if any) and send EventSkipped after duration specified by heartbeatTimeout
+    // cancel current timer (if any) and send MessageSkipped after duration specified by heartbeatTimeout
     timer.foreach(_.cancel)
-    Some(config.system.scheduler.scheduleOnce(config.heartbeatTimeout, self, EventSkipped))
+    Some(config.system.scheduler.scheduleOnce(config.heartbeatTimeout, self, MessageSkipped))
   }
 }
 
@@ -65,15 +60,19 @@ object HeartbeatActor {
     heartbeatTimeout: FiniteDuration,
     missedHeartbeatsThreshold: Int)
 
-  sealed trait Event
-  case object EventPulse extends Event
-  case object EventSkipped extends Event
-  case object EventDeactivate extends Event
-  case class EventActivate(heartbeatSkippedAction: Runnable, heartbeatFailureAction: Runnable) extends Event
+  sealed trait Message
+  case object MessagePulse extends Message
+  case object MessageSkipped extends Message
+  case object MessageDeactivate extends Message
+  case class MessageActivate(reactor: Reactor) extends Message
+
+  trait Reactor {
+    def onSkip(): Unit
+    def onFailure(): Unit
+  }
 
   case class StateActive(
-    onSkipped: Runnable,
-    onFailure: Runnable,
+    reactor: Reactor,
     timer: Option[Cancellable] = None,
     missed: Int = 0)
 

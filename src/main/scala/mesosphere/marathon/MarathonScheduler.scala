@@ -41,33 +41,27 @@ class MarathonScheduler @Inject() (
 
   implicit val zkTimeout = config.zkTimeoutDuration
 
-  // virtualHeartbeatTasks is sent in a reconciliation message to mesos in order to force a
-  // predictable response: the master (if we're connected) will send back a TASK_LOST because
-  // the fake task ID and agent ID that we use will never actually exist in the cluster.
-  // this is part of a short-term workaround: will no longer be needed once marathon is ported
-  // to use the new mesos v1 http API.
-  private[this] val virtualHeartbeatTasks: java.util.Collection[TaskStatus] = Seq(
-    TaskStatus.newBuilder
-    .setTaskId(TaskID.newBuilder.setValue("fake-marathon-pacemaker-task-" + UUID.randomUUID().toString))
-    .setState(TaskState.TASK_LOST) // required, so we just need to set something
-    .setSlaveId(SlaveID.newBuilder.setValue("fake-marathon-pacemaker-agent-" + UUID.randomUUID().toString))
-    .build
-  ).asJava
+  protected def heartbeatReactor(driver: SchedulerDriver): HeartbeatActor.Reactor = new HeartbeatActor.Reactor {
+    // virtualHeartbeatTasks is sent in a reconciliation message to mesos in order to force a
+    // predictable response: the master (if we're connected) will send back a TASK_LOST because
+    // the fake task ID and agent ID that we use will never actually exist in the cluster.
+    // this is part of a short-term workaround: will no longer be needed once marathon is ported
+    // to use the new mesos v1 http API.
+    private[this] val virtualHeartbeatTasks: java.util.Collection[TaskStatus] = Seq(
+      TaskStatus.newBuilder
+      .setTaskId(TaskID.newBuilder.setValue("fake-marathon-pacemaker-task-" + UUID.randomUUID().toString))
+      .setState(TaskState.TASK_LOST) // required, so we just need to set something
+      .setSlaveId(SlaveID.newBuilder.setValue("fake-marathon-pacemaker-agent-" + UUID.randomUUID().toString))
+      .build
+    ).asJava
 
-  private[this] val heartbeatFailure = new Runnable {
-    override def run: Unit = {
-      log.warn("Too many subsequent heartbeats missed; assuming disconnected from mesos master")
-
-      // for now, same logic as in disconnect() below
-      heartbeatMonitor ! HeartbeatActor.EventDeactivate
-      eventBus.publish(SchedulerDisconnectedEvent())
-      schedulerCallbacks.disconnected()
-    }
-  }
-
-  protected def heartbeatSkipped(driver: SchedulerDriver): Runnable = new Runnable {
-    override def run: Unit = {
+    override def onSkip(): Unit = {
       driver.reconcileTasks(virtualHeartbeatTasks)
+    }
+
+    override def onFailure(): Unit = {
+      log.warn("Too many subsequent heartbeats missed; inferring disconnected from mesos master")
+      disconnected(driver)
     }
   }
 
@@ -76,7 +70,7 @@ class MarathonScheduler @Inject() (
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
     log.info(s"Registered as ${frameworkId.getValue} to master '${master.getId}'")
-    heartbeatMonitor ! HeartbeatActor.EventActivate(heartbeatSkipped(driver), heartbeatFailure)
+    heartbeatMonitor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
     frameworkIdUtil.store(frameworkId)
     mesosLeaderInfo.onNewMasterInfo(master)
     eventBus.publish(SchedulerRegisteredEvent(frameworkId.getValue, master.getHostname))
@@ -84,14 +78,14 @@ class MarathonScheduler @Inject() (
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
     log.info("Re-registered to %s".format(master))
-    heartbeatMonitor ! HeartbeatActor.EventActivate(heartbeatSkipped(driver), heartbeatFailure)
+    heartbeatMonitor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
     mesosLeaderInfo.onNewMasterInfo(master)
     eventBus.publish(SchedulerReregisteredEvent(master.getHostname))
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: java.util.List[Offer]): Unit = {
     import scala.collection.JavaConverters._
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
     offers.asScala.foreach { offer =>
       val processFuture = offerProcessor.processOffer(offer)
       processFuture.onComplete {
@@ -103,14 +97,14 @@ class MarathonScheduler @Inject() (
 
   override def offerRescinded(driver: SchedulerDriver, offer: OfferID): Unit = {
     log.info("Offer %s rescinded".format(offer))
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
   }
 
   override def statusUpdate(driver: SchedulerDriver, status: TaskStatus): Unit = {
     log.info("Received status update for task %s: %s (%s)"
       .format(status.getTaskId.getValue, status.getState, status.getMessage))
 
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
     taskStatusProcessor.publish(status).onFailure {
       case NonFatal(e) =>
         log.error(s"while processing task status update $status", e)
@@ -123,14 +117,17 @@ class MarathonScheduler @Inject() (
     slave: SlaveID,
     message: Array[Byte]): Unit = {
     log.info("Received framework message %s %s %s ".format(executor, slave, message))
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
     eventBus.publish(MesosFrameworkMessageEvent(executor.getValue, slave.getValue, message))
   }
 
   override def disconnected(driver: SchedulerDriver) {
     log.warn("Disconnected")
 
-    heartbeatMonitor ! HeartbeatActor.EventDeactivate
+    // heartbeat monitor may have (transiently) triggered this, but that's ok because if it did then
+    // it's already "inactive", so this becomes a no-op
+    heartbeatMonitor ! HeartbeatActor.MessageDeactivate
+
     eventBus.publish(SchedulerDisconnectedEvent())
 
     // Disconnection from the Mesos master has occurred.
@@ -140,7 +137,7 @@ class MarathonScheduler @Inject() (
 
   override def slaveLost(driver: SchedulerDriver, slave: SlaveID) {
     log.info(s"Lost slave $slave")
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
   }
 
   override def executorLost(
@@ -149,7 +146,7 @@ class MarathonScheduler @Inject() (
     slave: SlaveID,
     p4: Int) {
     log.info(s"Lost executor $executor slave $p4")
-    heartbeatMonitor ! HeartbeatActor.EventPulse
+    heartbeatMonitor ! HeartbeatActor.MessagePulse
   }
 
   override def error(driver: SchedulerDriver, message: String) {
@@ -158,7 +155,7 @@ class MarathonScheduler @Inject() (
       s"delete the ZooKeeper Node: ${config.zkPath}/state/framework:id\n" +
       s"CAUTION: if you remove this node, all tasks started with the current frameworkId will be orphaned!")
 
-    heartbeatMonitor ! HeartbeatActor.EventDeactivate
+    heartbeatMonitor ! HeartbeatActor.MessageDeactivate
 
     // Currently, it's pretty hard to disambiguate this error from other causes of framework errors.
     // Watch MESOS-2522 which will add a reason field for framework errors to help with this.
