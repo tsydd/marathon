@@ -242,18 +242,19 @@ class MarathonSchedulerService @Inject() (
     log.info("Lost leadership")
 
     leadershipCoordinator.stop()
-    mesosHeartbeatActor ! HeartbeatActor.MessageDeactivate
 
     val oldTimer = timer
     timer = newTimer()
     oldTimer.cancel()
 
-    if (driver.isDefined) {
+    driver.map { driverInstance =>
+      mesosHeartbeatActor ! HeartbeatActor.MessageDeactivate(driverInstance)
       // Our leadership has been defeated. Thus, stop the driver.
       // Note that abdication command will be ran upon driver shutdown which
       // will then offer leadership again.
       stopDriver()
-    } else {
+    }
+    if (driver.isEmpty) {
       electionService.offerLeadership(this)
     }
   }

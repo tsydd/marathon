@@ -143,6 +143,7 @@ class MarathonSchedulerServiceTest
 
     when(frameworkIdUtil.fetch()).thenReturn(None)
 
+    val driver = mock[SchedulerDriver]
     val schedulerService = new MarathonSchedulerService(
       leadershipCoordinator,
       healthCheckManager,
@@ -151,7 +152,7 @@ class MarathonSchedulerServiceTest
       electionService,
       prePostDriverCallbacks,
       appRepository,
-      driverFactory(mock[SchedulerDriver]),
+      driverFactory(driver),
       system,
       migration,
       schedulerActor,
@@ -161,12 +162,12 @@ class MarathonSchedulerServiceTest
     }
 
     schedulerService.timer = mockTimer
-
+    schedulerService.driver = Some(driver)
     schedulerService.stopLeadership()
 
     verify(mockTimer).cancel()
     assert(schedulerService.timer != mockTimer, "Timer should be replaced after leadership defeat")
-    assert(HeartbeatActor.MessageDeactivate == heartbeatProbe.expectMsgType[HeartbeatActor.Message])
+    assert(HeartbeatActor.MessageDeactivate(driver) == heartbeatProbe.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Re-enable timer when re-elected") {

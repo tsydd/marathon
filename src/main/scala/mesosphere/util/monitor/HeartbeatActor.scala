@@ -17,8 +17,8 @@ class HeartbeatActor(config: HeartbeatActor.Config) extends Actor with ActorLogg
   def receive: Receive = stateInactive
 
   def stateInactive: Receive = LoggingReceive.withLabel("inactive") {
-    case MessageActivate(reactor) =>
-      context.become(stateActive(StateActive(reactor, resetTimer())))
+    case MessageActivate(reactor, token) =>
+      context.become(stateActive(StateActive(reactor, token, resetTimer())))
     case _ => // swallow all other event types
   }
 
@@ -36,12 +36,16 @@ class HeartbeatActor(config: HeartbeatActor.Config) extends Actor with ActorLogg
         context.become(stateActive(state.copy(missed = state.missed + 1, timer = resetTimer(state.timer))))
       }
 
-    case MessageDeactivate =>
-      state.timer.foreach(_.cancel)
-      context.become(stateInactive)
+    case MessageDeactivate(token) =>
+      // only deactivate if token == state.sessionToken
+      if (token.eq(state.sessionToken)) {
+        state.timer.foreach(_.cancel)
+        context.become(stateInactive)
+      }
 
-    case MessageActivate(newReactor) =>
-      context.become(stateActive(StateActive(timer = resetTimer(state.timer), reactor = newReactor)))
+    case MessageActivate(newReactor, newToken) =>
+      context.become(stateActive(StateActive(
+        timer = resetTimer(state.timer), reactor = newReactor, sessionToken = newToken)))
   }
 
   protected def resetTimer(timer: Option[Cancellable] = None): Option[Cancellable] = {
@@ -63,16 +67,20 @@ object HeartbeatActor {
   sealed trait Message
   case object MessagePulse extends Message
   case object MessageSkipped extends Message
-  case object MessageDeactivate extends Message
-  case class MessageActivate(reactor: Reactor) extends Message
+  case class MessageDeactivate(sessionToken: AnyRef) extends Message
+  case class MessageActivate(reactor: Reactor, sessionToken: AnyRef) extends Message
 
   trait Reactor {
     def onSkip(): Unit
     def onFailure(): Unit
   }
 
+  /**
+    * @constructor capture the state of an active heartbeat monitor
+    */
   case class StateActive(
     reactor: Reactor,
+    sessionToken: AnyRef,
     timer: Option[Cancellable] = None,
     missed: Int = 0)
 

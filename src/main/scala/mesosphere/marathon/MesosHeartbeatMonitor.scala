@@ -59,12 +59,12 @@ class MesosHeartbeatMonitor @Inject() (
     driver: SchedulerDriver,
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
-    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
+    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver), driver)
     scheduler.registered(driver, frameworkId, master)
   }
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
-    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
+    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver), driver)
     scheduler.reregistered(driver, master)
   }
 
@@ -95,7 +95,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def disconnected(driver: SchedulerDriver): Unit = {
     // heartbeatReactor may have triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
-    heartbeatActor ! HeartbeatActor.MessageDeactivate
+    heartbeatActor ! HeartbeatActor.MessageDeactivate(driver)
     scheduler.disconnected(driver)
   }
 
@@ -116,7 +116,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def error(driver: SchedulerDriver, message: String): Unit = {
     // errors from the driver are fatal (to the driver) so it should be safe to deactivate here because
     // the marathon scheduler **should** either exit or else create a new driver instance and reregister.
-    heartbeatActor ! HeartbeatActor.MessageDeactivate
+    heartbeatActor ! HeartbeatActor.MessageDeactivate(driver)
     scheduler.error(driver, message)
   }
 }
