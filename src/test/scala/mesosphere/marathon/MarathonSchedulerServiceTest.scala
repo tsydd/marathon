@@ -14,7 +14,7 @@ import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.{ AppRepository, MarathonStore, Migration }
 import mesosphere.marathon.test.MarathonActorSupport
-import mesosphere.util.monitor.HeartbeatActor
+import mesosphere.marathon.util.heartbeat.HeartbeatActor
 import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil }
 import org.apache.mesos.{ SchedulerDriver, Protos => mesos }

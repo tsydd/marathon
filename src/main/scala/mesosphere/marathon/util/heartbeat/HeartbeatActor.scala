@@ -1,4 +1,4 @@
-package mesosphere.util.monitor
+package mesosphere.marathon.util.heartbeat
 
 import akka.actor._
 import akka.event.LoggingReceive

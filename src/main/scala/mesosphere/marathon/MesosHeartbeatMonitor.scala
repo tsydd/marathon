@@ -4,7 +4,7 @@ import java.util.UUID
 import javax.inject.{ Inject, Named }
 
 import akka.actor.ActorRef
-import mesosphere.util.monitor._
+import mesosphere.marathon.util.heartbeat._
 import org.apache.mesos.{ Scheduler, SchedulerDriver }
 import org.apache.mesos.Protos._
 import org.slf4j.LoggerFactory
