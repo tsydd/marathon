@@ -19,6 +19,7 @@ import mesosphere.marathon.state.{ AppDefinition, AppRepository, Migration, Path
 import mesosphere.marathon.upgrade.DeploymentManager.{ CancelDeployment, DeploymentStepInfo }
 import mesosphere.marathon.upgrade.DeploymentPlan
 import mesosphere.util.PromiseActor
+import mesosphere.util.monitor.HeartbeatActor
 import mesosphere.util.state.FrameworkIdUtil
 import org.apache.mesos.Protos.FrameworkID
 import org.apache.mesos.SchedulerDriver
@@ -60,6 +61,7 @@ class MarathonSchedulerService @Inject() (
   system: ActorSystem,
   migration: Migration,
   @Named("schedulerActor") schedulerActor: ActorRef,
+  @Named(ModuleNames.MESOS_HEARTBEAT_ACTOR) mesosHeartbeatActor: ActorRef,
   metrics: Metrics = new Metrics(new MetricRegistry))
     extends AbstractExecutionThreadService with ElectionCandidate {
 
@@ -240,6 +242,7 @@ class MarathonSchedulerService @Inject() (
     log.info("Lost leadership")
 
     leadershipCoordinator.stop()
+    mesosHeartbeatActor ! HeartbeatActor.MessageDeactivate
 
     val oldTimer = timer
     timer = newTimer()

@@ -14,6 +14,7 @@ import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.{ AppRepository, MarathonStore, Migration }
 import mesosphere.marathon.test.MarathonActorSupport
+import mesosphere.util.monitor.HeartbeatActor
 import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil }
 import org.apache.mesos.{ SchedulerDriver, Protos => mesos }
@@ -70,6 +71,7 @@ class MarathonSchedulerServiceTest
   import scala.concurrent.ExecutionContext.Implicits.global
 
   private[this] var probe: TestProbe = _
+  private[this] var heartbeatProbe: TestProbe = _
   private[this] var leadershipCoordinator: LeadershipCoordinator = _
   private[this] var healthCheckManager: HealthCheckManager = _
   private[this] var config: MarathonConf = _
@@ -81,10 +83,12 @@ class MarathonSchedulerServiceTest
   private[this] var scheduler: MarathonScheduler = _
   private[this] var migration: Migration = _
   private[this] var schedulerActor: ActorRef = _
+  private[this] var heartbeatActor: ActorRef = _
   private[this] var prePostDriverCallbacks: scala.collection.immutable.Seq[PrePostDriverCallback] = _
 
   before {
     probe = TestProbe()
+    heartbeatProbe = TestProbe()
     leadershipCoordinator = mock[LeadershipCoordinator]
     healthCheckManager = mock[HealthCheckManager]
     config = mockConfig
@@ -96,6 +100,7 @@ class MarathonSchedulerServiceTest
     scheduler = mock[MarathonScheduler]
     migration = mock[Migration]
     schedulerActor = probe.ref
+    heartbeatActor = heartbeatProbe.ref
     prePostDriverCallbacks = scala.collection.immutable.Seq.empty
   }
 
@@ -121,7 +126,8 @@ class MarathonSchedulerServiceTest
       driverFactory(mock[SchedulerDriver]),
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     )
 
     schedulerService.timer = mockTimer
@@ -148,7 +154,8 @@ class MarathonSchedulerServiceTest
       driverFactory(mock[SchedulerDriver]),
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
       override def startLeadership(): Unit = ()
     }
@@ -159,6 +166,7 @@ class MarathonSchedulerServiceTest
 
     verify(mockTimer).cancel()
     assert(schedulerService.timer != mockTimer, "Timer should be replaced after leadership defeat")
+    assert(HeartbeatActor.MessageDeactivate == heartbeatProbe.expectMsgType[HeartbeatActor.Message])
   }
 
   test("Re-enable timer when re-elected") {
@@ -178,6 +186,7 @@ class MarathonSchedulerServiceTest
       system,
       migration,
       schedulerActor,
+      heartbeatActor,
       metrics = new Metrics(new MetricRegistry)
     ) {
       override def newTimer() = mockTimer
@@ -215,7 +224,8 @@ class MarathonSchedulerServiceTest
       driverFactory(mock[SchedulerDriver]),
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
       override def startLeadership(): Unit = ()
       override def newTimer() = mockTimer
@@ -243,7 +253,8 @@ class MarathonSchedulerServiceTest
       driverFactory(mock[SchedulerDriver]),
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
     }
 
@@ -282,7 +293,8 @@ class MarathonSchedulerServiceTest
       driverFactory,
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
     }
 
@@ -314,7 +326,8 @@ class MarathonSchedulerServiceTest
       driverFactory,
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
     }
 
@@ -347,7 +360,8 @@ class MarathonSchedulerServiceTest
       driverFactory,
       system,
       migration,
-      schedulerActor
+      schedulerActor,
+      heartbeatActor
     ) {
     }
 
