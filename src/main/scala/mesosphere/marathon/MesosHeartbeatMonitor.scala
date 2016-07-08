@@ -11,6 +11,17 @@ import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
 
+// @constructor create a mesos Scheduler decorator that intercepts callbacks from a mesos SchedulerDriver,
+// translating each callback into some kind of HeartbeatMonitor.Message that is asynchronously delivered to a
+// heartbeatActor. All callback parameters are passed through, unchanged, to the given delegate scheduler
+// implementation.
+//
+// @param scheduler is the delegate scheduler implementation
+// @param heartbeatActor is the receipient of generated HeartbeatActor.Message's
+//
+// @see mesosphere.util.monitor.HeartbeatMonitor
+// @see org.apache.mesos.Scheduler
+// @see org.apache.mesos.SchedulerDriver
 class MesosHeartbeatMonitor @Inject() (
     @Named(MesosHeartbeatMonitor.BASE) scheduler: Scheduler,
     @Named(ModuleNames.MESOS_HEARTBEAT_ACTOR) heartbeatActor: ActorRef
@@ -82,7 +93,7 @@ class MesosHeartbeatMonitor @Inject() (
   }
 
   override def disconnected(driver: SchedulerDriver): Unit = {
-    // heartbeat monitor may have (transiently) triggered this, but that's ok because if it did then
+    // heartbeatReactor may have triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
     heartbeatActor ! HeartbeatActor.MessageDeactivate
     scheduler.disconnected(driver)
