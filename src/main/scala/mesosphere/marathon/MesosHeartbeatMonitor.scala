@@ -13,7 +13,7 @@ import scala.collection.JavaConverters._
 
 class MesosHeartbeatMonitor @Inject() (
     @Named(MesosHeartbeatMonitor.BASE) scheduler: Scheduler,
-    @Named(ModuleNames.MESOS_HEARTBEAT_MONITOR) heartbeatMonitor: ActorRef
+    @Named(ModuleNames.MESOS_HEARTBEAT_ACTOR) heartbeatActor: ActorRef
 ) extends Scheduler {
 
   private[this] val log = LoggerFactory.getLogger(getClass.getName)
@@ -48,27 +48,27 @@ class MesosHeartbeatMonitor @Inject() (
     driver: SchedulerDriver,
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
+    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
     scheduler.registered(driver, frameworkId, master)
   }
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
+    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver))
     scheduler.reregistered(driver, master)
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: java.util.List[Offer]): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.resourceOffers(driver, offers)
   }
 
   override def offerRescinded(driver: SchedulerDriver, offer: OfferID): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.offerRescinded(driver, offer)
   }
 
   override def statusUpdate(driver: SchedulerDriver, status: TaskStatus): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.statusUpdate(driver, status)
   }
 
@@ -77,19 +77,19 @@ class MesosHeartbeatMonitor @Inject() (
     executor: ExecutorID,
     slave: SlaveID,
     message: Array[Byte]): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.frameworkMessage(driver, executor, slave, message)
   }
 
   override def disconnected(driver: SchedulerDriver): Unit = {
     // heartbeat monitor may have (transiently) triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
-    heartbeatMonitor ! HeartbeatActor.MessageDeactivate
+    heartbeatActor ! HeartbeatActor.MessageDeactivate
     scheduler.disconnected(driver)
   }
 
   override def slaveLost(driver: SchedulerDriver, slave: SlaveID): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.slaveLost(driver, slave)
   }
 
@@ -98,18 +98,21 @@ class MesosHeartbeatMonitor @Inject() (
     executor: ExecutorID,
     slave: SlaveID,
     code: Int): Unit = {
-    heartbeatMonitor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! HeartbeatActor.MessagePulse
     scheduler.executorLost(driver, executor, slave, code)
   }
 
   override def error(driver: SchedulerDriver, message: String): Unit = {
     // errors from the driver are fatal (to the driver) so it should be safe to deactivate here because
     // the marathon scheduler **should** either exit or else create a new driver instance and reregister.
-    heartbeatMonitor ! HeartbeatActor.MessageDeactivate
+    heartbeatActor ! HeartbeatActor.MessageDeactivate
     scheduler.error(driver, message)
   }
 }
 
 object MesosHeartbeatMonitor {
   final val BASE = "mesosHeartbeatMonitor.base"
+
+  final val DEFAULT_HEARTBEAT_INTERVAL_MS = 15000L
+  final val DEFAULT_HEARTBEAT_FAILURE_THRESHOLD = 5
 }

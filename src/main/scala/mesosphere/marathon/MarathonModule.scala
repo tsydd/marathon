@@ -58,7 +58,7 @@ object ModuleNames {
   final val STORE_TASK = "TaskStore"
   final val STORE_EVENT_SUBSCRIBERS = "EventSubscriberStore"
 
-  final val MESOS_HEARTBEAT_MONITOR = "MesosHeartbeatActor"
+  final val MESOS_HEARTBEAT_ACTOR = "MesosHeartbeatActor"
 }
 
 class MarathonModule(conf: MarathonConf, http: HttpConf)
@@ -98,15 +98,16 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
     bind(classOf[HttpEventStreamActorMetrics]).in(Scopes.SINGLETON)
   }
 
-  @Named(ModuleNames.MESOS_HEARTBEAT_MONITOR)
+  @Named(ModuleNames.MESOS_HEARTBEAT_ACTOR)
   @Provides
   @Singleton
-  def provideHeartbeatActor(system: ActorSystem): ActorRef = {
+  def provideMesosHeartbeatActor(system: ActorSystem): ActorRef = {
     system.actorOf(HeartbeatActor.props(HeartbeatActor.Config(
       system,
-      FiniteDuration(conf.mesosHeartbeatInterval.get.getOrElse(15000L), TimeUnit.MILLISECONDS),
-      conf.mesosHeartbeatFailureThreshold.get.getOrElse(5)
-    )), ModuleNames.MESOS_HEARTBEAT_MONITOR)
+      FiniteDuration(conf.mesosHeartbeatInterval.get.getOrElse(
+        MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_INTERVAL_MS), TimeUnit.MILLISECONDS),
+      conf.mesosHeartbeatFailureThreshold.get.getOrElse(MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_FAILURE_THRESHOLD)
+    )), ModuleNames.MESOS_HEARTBEAT_ACTOR)
   }
 
   @Provides

@@ -341,7 +341,7 @@ trait MarathonConf
       "during a time window of this duration, attempt to coerce mesos into communicating with marathon.",
     noshort = true,
     hidden = true,
-    default = Some(15000L)) // 15 seconds
+    default = Some(MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_INTERVAL_MS))
 
   lazy val mesosHeartbeatFailureThreshold = opt[Int](
     "mesos_heartbeat_failure_threshold",
@@ -349,5 +349,5 @@ trait MarathonConf
       "infer that marathon has become disconnected from the master.",
     noshort = true,
     hidden = true,
-    default = Some(5))
+    default = Some(MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_FAILURE_THRESHOLD))
 }
