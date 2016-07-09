@@ -14,7 +14,7 @@ import mesosphere.marathon.health.HealthCheckManager
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.{ AppRepository, MarathonStore, Migration }
 import mesosphere.marathon.test.MarathonActorSupport
-import mesosphere.marathon.util.heartbeat.HeartbeatActor
+import mesosphere.marathon.util.heartbeat.Heartbeat
 import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil }
 import org.apache.mesos.{ SchedulerDriver, Protos => mesos }
@@ -167,7 +167,7 @@ class MarathonSchedulerServiceTest
 
     verify(mockTimer).cancel()
     assert(schedulerService.timer != mockTimer, "Timer should be replaced after leadership defeat")
-    assert(HeartbeatActor.MessageDeactivate(driver) == heartbeatProbe.expectMsgType[HeartbeatActor.Message])
+    assert(Heartbeat.MessageDeactivate(driver) == heartbeatProbe.expectMsgType[Heartbeat.Message])
   }
 
   test("Re-enable timer when re-elected") {

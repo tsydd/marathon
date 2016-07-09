@@ -18,7 +18,7 @@ import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.{ AppDefinition, AppRepository, Migration, PathId, Timestamp }
 import mesosphere.marathon.upgrade.DeploymentManager.{ CancelDeployment, DeploymentStepInfo }
 import mesosphere.marathon.upgrade.DeploymentPlan
-import mesosphere.marathon.util.heartbeat.HeartbeatActor
+import mesosphere.marathon.util.heartbeat.Heartbeat
 import mesosphere.util.PromiseActor
 import mesosphere.util.state.FrameworkIdUtil
 import org.apache.mesos.Protos.FrameworkID
@@ -248,7 +248,7 @@ class MarathonSchedulerService @Inject() (
     oldTimer.cancel()
 
     driver.map { driverInstance =>
-      mesosHeartbeatActor ! HeartbeatActor.MessageDeactivate(driverInstance)
+      mesosHeartbeatActor ! Heartbeat.MessageDeactivate(driverInstance)
       // Our leadership has been defeated. Thus, stop the driver.
       // Note that abdication command will be ran upon driver shutdown which
       // will then offer leadership again.

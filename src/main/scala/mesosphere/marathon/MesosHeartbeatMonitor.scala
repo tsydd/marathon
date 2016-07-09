@@ -4,7 +4,7 @@ import java.util.UUID
 import javax.inject.{ Inject, Named }
 
 import akka.actor.ActorRef
-import mesosphere.marathon.util.heartbeat._
+import mesosphere.marathon.util.heartbeat.Heartbeat
 import org.apache.mesos.{ Scheduler, SchedulerDriver }
 import org.apache.mesos.Protos._
 import org.slf4j.LoggerFactory
@@ -17,7 +17,7 @@ import scala.collection.JavaConverters._
 // implementation.
 //
 // @param scheduler is the delegate scheduler implementation
-// @param heartbeatActor is the receipient of generated HeartbeatActor.Message's
+// @param heartbeatActor is the receipient of generated Heartbeat.Message's
 //
 // @see mesosphere.util.monitor.HeartbeatMonitor
 // @see org.apache.mesos.Scheduler
@@ -31,7 +31,7 @@ class MesosHeartbeatMonitor @Inject() (
 
   log.info(s"using mesos heartbeat monitor for scheduler $scheduler")
 
-  protected def heartbeatReactor(driver: SchedulerDriver): HeartbeatActor.Reactor = new HeartbeatActor.Reactor {
+  protected def heartbeatReactor(driver: SchedulerDriver): Heartbeat.Reactor = new Heartbeat.Reactor {
     // virtualHeartbeatTasks is sent in a reconciliation message to mesos in order to force a
     // predictable response: the master (if we're connected) will send back a TASK_LOST because
     // the fake task ID and agent ID that we use will never actually exist in the cluster.
@@ -59,27 +59,27 @@ class MesosHeartbeatMonitor @Inject() (
     driver: SchedulerDriver,
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
-    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver), driver)
+    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), driver)
     scheduler.registered(driver, frameworkId, master)
   }
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
-    heartbeatActor ! HeartbeatActor.MessageActivate(heartbeatReactor(driver), driver)
+    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), driver)
     scheduler.reregistered(driver, master)
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: java.util.List[Offer]): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.resourceOffers(driver, offers)
   }
 
   override def offerRescinded(driver: SchedulerDriver, offer: OfferID): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.offerRescinded(driver, offer)
   }
 
   override def statusUpdate(driver: SchedulerDriver, status: TaskStatus): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.statusUpdate(driver, status)
   }
 
@@ -88,19 +88,19 @@ class MesosHeartbeatMonitor @Inject() (
     executor: ExecutorID,
     slave: SlaveID,
     message: Array[Byte]): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.frameworkMessage(driver, executor, slave, message)
   }
 
   override def disconnected(driver: SchedulerDriver): Unit = {
     // heartbeatReactor may have triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
-    heartbeatActor ! HeartbeatActor.MessageDeactivate(driver)
+    heartbeatActor ! Heartbeat.MessageDeactivate(driver)
     scheduler.disconnected(driver)
   }
 
   override def slaveLost(driver: SchedulerDriver, slave: SlaveID): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.slaveLost(driver, slave)
   }
 
@@ -109,14 +109,14 @@ class MesosHeartbeatMonitor @Inject() (
     executor: ExecutorID,
     slave: SlaveID,
     code: Int): Unit = {
-    heartbeatActor ! HeartbeatActor.MessagePulse
+    heartbeatActor ! Heartbeat.MessagePulse
     scheduler.executorLost(driver, executor, slave, code)
   }
 
   override def error(driver: SchedulerDriver, message: String): Unit = {
     // errors from the driver are fatal (to the driver) so it should be safe to deactivate here because
     // the marathon scheduler **should** either exit or else create a new driver instance and reregister.
-    heartbeatActor ! HeartbeatActor.MessageDeactivate(driver)
+    heartbeatActor ! Heartbeat.MessageDeactivate(driver)
     scheduler.error(driver, message)
   }
 }

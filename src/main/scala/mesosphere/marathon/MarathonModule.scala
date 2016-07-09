@@ -26,7 +26,7 @@ import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state._
 import mesosphere.marathon.upgrade.{ DeploymentManager, DeploymentPlan }
-import mesosphere.marathon.util.heartbeat._
+import mesosphere.marathon.util.heartbeat.Heartbeat
 import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.mesos.MesosStateStore
 import mesosphere.util.state.zk.{ CompressionConf, ZKStore }
@@ -102,8 +102,7 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
   @Provides
   @Singleton
   def provideMesosHeartbeatActor(system: ActorSystem): ActorRef = {
-    system.actorOf(HeartbeatActor.props(HeartbeatActor.Config(
-      system,
+    system.actorOf(Heartbeat.props(Heartbeat.Config(
       FiniteDuration(conf.mesosHeartbeatInterval.get.getOrElse(
         MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_INTERVAL_MS), TimeUnit.MILLISECONDS),
       conf.mesosHeartbeatFailureThreshold.get.getOrElse(MesosHeartbeatMonitor.DEFAULT_HEARTBEAT_FAILURE_THRESHOLD)
