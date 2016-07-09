@@ -248,7 +248,7 @@ class MarathonSchedulerService @Inject() (
     oldTimer.cancel()
 
     driver.map { driverInstance =>
-      mesosHeartbeatActor ! Heartbeat.MessageDeactivate(driverInstance)
+      mesosHeartbeatActor ! Heartbeat.MessageDeactivate(MesosHeartbeatMonitor.sessionOf(driverInstance))
       // Our leadership has been defeated. Thus, stop the driver.
       // Note that abdication command will be ran upon driver shutdown which
       // will then offer leadership again.

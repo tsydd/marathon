@@ -27,6 +27,8 @@ class MesosHeartbeatMonitor @Inject() (
     @Named(ModuleNames.MESOS_HEARTBEAT_ACTOR) heartbeatActor: ActorRef
 ) extends Scheduler {
 
+  import MesosHeartbeatMonitor._
+
   private[this] val log = LoggerFactory.getLogger(getClass.getName)
 
   log.info(s"using mesos heartbeat monitor for scheduler $scheduler")
@@ -59,12 +61,12 @@ class MesosHeartbeatMonitor @Inject() (
     driver: SchedulerDriver,
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
-    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), driver)
+    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), sessionOf(driver))
     scheduler.registered(driver, frameworkId, master)
   }
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
-    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), driver)
+    heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), sessionOf(driver))
     scheduler.reregistered(driver, master)
   }
 
@@ -95,7 +97,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def disconnected(driver: SchedulerDriver): Unit = {
     // heartbeatReactor may have triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
-    heartbeatActor ! Heartbeat.MessageDeactivate(driver)
+    heartbeatActor ! Heartbeat.MessageDeactivate(sessionOf(driver))
     scheduler.disconnected(driver)
   }
 
@@ -116,7 +118,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def error(driver: SchedulerDriver, message: String): Unit = {
     // errors from the driver are fatal (to the driver) so it should be safe to deactivate here because
     // the marathon scheduler **should** either exit or else create a new driver instance and reregister.
-    heartbeatActor ! Heartbeat.MessageDeactivate(driver)
+    heartbeatActor ! Heartbeat.MessageDeactivate(sessionOf(driver))
     scheduler.error(driver, message)
   }
 }
@@ -126,4 +128,11 @@ object MesosHeartbeatMonitor {
 
   final val DEFAULT_HEARTBEAT_INTERVAL_MS = 15000L
   final val DEFAULT_HEARTBEAT_FAILURE_THRESHOLD = 5
+
+  // @return a uniquely identifying token for the current session
+  def sessionOf(driver: SchedulerDriver): AnyRef =
+    // a new driver is instantiated for each session already so we can just use the driver instance
+    // as the session token. it feels a bit hacky but does the job. would rather hack this in one place
+    // vs everywhere else that wants the session token.
+    driver
 }

@@ -167,7 +167,8 @@ class MarathonSchedulerServiceTest
 
     verify(mockTimer).cancel()
     assert(schedulerService.timer != mockTimer, "Timer should be replaced after leadership defeat")
-    assert(Heartbeat.MessageDeactivate(driver) == heartbeatProbe.expectMsgType[Heartbeat.Message])
+    val hmsg = heartbeatProbe.expectMsgType[Heartbeat.Message]
+    assert(Heartbeat.MessageDeactivate(MesosHeartbeatMonitor.sessionOf(driver)) == hmsg)
   }
 
   test("Re-enable timer when re-elected") {
