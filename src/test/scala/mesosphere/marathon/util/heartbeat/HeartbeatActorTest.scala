@@ -50,7 +50,7 @@ class HeartbeatActorTest extends AkkaUnitTest with TestKitBase with ImplicitSend
 
     "reactivate when active, upon receipt of a valid activation message" in {
       val fsm = TestFSMRef(new HeartbeatActor(fakeConfig))
-      fsm.setState(stateName = StateActive, stateData = DataActive(FakeReactor, FakeSessionToken))
+      fsm.setState(stateName = StateActive, stateData = DataActive(FakeReactor, FakeSessionToken, missed = 1))
       fsm ! MessageActivate(FakeReactor, AnotherFakeSessionToken)
       fsm.stateName should be (StateActive)
       fsm.stateData should be (DataActive(FakeReactor, AnotherFakeSessionToken))
@@ -66,10 +66,10 @@ class HeartbeatActorTest extends AkkaUnitTest with TestKitBase with ImplicitSend
 
     "do NOT deactivate when active, upon receipt of an invalid deactivation message" in {
       val fsm = TestFSMRef(new HeartbeatActor(fakeConfig))
-      fsm.setState(stateName = StateActive, stateData = DataActive(FakeReactor, FakeSessionToken))
+      fsm.setState(stateName = StateActive, stateData = DataActive(FakeReactor, FakeSessionToken, missed = 1))
       fsm ! MessageDeactivate(InvalidSessionToken)
       fsm.stateName should be (StateActive)
-      fsm.stateData should be (DataActive(FakeReactor, FakeSessionToken))
+      fsm.stateData should be (DataActive(FakeReactor, FakeSessionToken, missed = 1))
     }
 
     // ActorReactor translates Reactor callbacks into messages delivered to testActor (from ImplicitSender),
