@@ -48,6 +48,7 @@ class MesosHeartbeatMonitor @Inject() (
     ).asJava
 
     override def onSkip(): Unit = {
+      log.debug("Prompting mesos for a heartbeat via explicit task reconciliation")
       driver.reconcileTasks(virtualHeartbeatTasks)
     }
 
