@@ -27,7 +27,7 @@ class HeartbeatActor(config: Heartbeat.Config) extends LoggingFSM[HeartbeatInter
       stay using data.copy(missed = 0)
 
     case Event(StateTimeout, data: DataActive) =>
-      if (data.missed + 1 > config.missedHeartbeatsThreshold) {
+      if (data.missed + 1 >= config.missedHeartbeatsThreshold) {
         data.reactor.onFailure
         goto(StateInactive) using DataNone
       } else {
