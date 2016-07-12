@@ -14,14 +14,18 @@ class MesosHeartbeatMonitorTest extends MarathonActorSupport
     val scheduler = mock[Scheduler]
     val reactor = mock[Heartbeat.Reactor]
 
-    def newMonitor(): MesosHeartbeatMonitor = new MesosHeartbeatMonitor(scheduler, heartbeatActor.ref) {
-      override def heartbeatReactor(driver: SchedulerDriver) = reactor
-    }
+    def newMonitor(withFakeReactor: Boolean = true): MesosHeartbeatMonitor =
+      if (withFakeReactor)
+        new MesosHeartbeatMonitor(scheduler, heartbeatActor.ref) {
+          override def heartbeatReactor(driver: SchedulerDriver) = reactor
+        }
+      else
+        new MesosHeartbeatMonitor(scheduler, heartbeatActor.ref)
   }
 
   test("MesosHeartbeatMonitor fully decorates Scheduler") {
     val factory = new MonitorFactory
-    val monitor = factory.newMonitor
+    val monitor = factory.newMonitor()
 
     monitor.registered(null, null, null)
     monitor.reregistered(null, null)
@@ -50,7 +54,7 @@ class MesosHeartbeatMonitorTest extends MarathonActorSupport
 
   test("MesosHeartbeatMonitor sends proper actor messages for Scheduler callbacks") {
     val factory = new MonitorFactory
-    val monitor = factory.newMonitor
+    val monitor = factory.newMonitor()
 
     // activation messages
     val registeredDriver = mock[SchedulerDriver]
@@ -94,5 +98,20 @@ class MesosHeartbeatMonitorTest extends MarathonActorSupport
     factory.heartbeatActor.expectMsgType[Heartbeat.Message] should be(Heartbeat.MessagePulse)
   }
 
-  // TODO(jdef) test MesosHeartbeatMonitor.heartbeatReactor implementation
+  test("heartbeatReactor property handles skip and failure events") {
+    val factory = new MonitorFactory
+    val monitor = factory.newMonitor(false)
+
+    val fakeDriver = mock[SchedulerDriver]
+    val reactor = monitor.heartbeatReactor(fakeDriver)
+
+    reactor.onSkip()
+    verify(fakeDriver, times(1)).reconcileTasks(any)
+
+    reactor.onFailure()
+    verify(factory.scheduler, times(1)).disconnected(fakeDriver)
+
+    noMoreInteractions(fakeDriver)
+    noMoreInteractions(factory.scheduler)
+  }
 }

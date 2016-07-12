@@ -33,7 +33,7 @@ class MesosHeartbeatMonitor @Inject() (
 
   log.info(s"using mesos heartbeat monitor for scheduler $scheduler")
 
-  protected def heartbeatReactor(driver: SchedulerDriver): Heartbeat.Reactor = new Heartbeat.Reactor {
+  protected[marathon] def heartbeatReactor(driver: SchedulerDriver): Heartbeat.Reactor = new Heartbeat.Reactor {
     // virtualHeartbeatTasks is sent in a reconciliation message to mesos in order to force a
     // predictable response: the master (if we're connected) will send back a TASK_LOST because
     // the fake task ID and agent ID that we use will never actually exist in the cluster.
