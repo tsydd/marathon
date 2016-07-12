@@ -31,7 +31,7 @@ class MesosHeartbeatMonitor @Inject() (
 
   private[this] val log = LoggerFactory.getLogger(getClass.getName)
 
-  log.info(s"using mesos heartbeat monitor for scheduler $scheduler")
+  log.debug(s"created mesos heartbeat monitor for scheduler $scheduler")
 
   protected[marathon] def heartbeatReactor(driver: SchedulerDriver): Heartbeat.Reactor = new Heartbeat.Reactor {
     // virtualHeartbeatTasks is sent in a reconciliation message to mesos in order to force a
@@ -39,13 +39,7 @@ class MesosHeartbeatMonitor @Inject() (
     // the fake task ID and agent ID that we use will never actually exist in the cluster.
     // this is part of a short-term workaround: will no longer be needed once marathon is ported
     // to use the new mesos v1 http API.
-    private[this] val virtualHeartbeatTasks: java.util.Collection[TaskStatus] = Seq(
-      TaskStatus.newBuilder
-      .setTaskId(TaskID.newBuilder.setValue("fake-marathon-pacemaker-task-" + UUID.randomUUID().toString))
-      .setState(TaskState.TASK_LOST) // required, so we just need to set something
-      .setSlaveId(SlaveID.newBuilder.setValue("fake-marathon-pacemaker-agent-" + UUID.randomUUID().toString))
-      .build
-    ).asJava
+    private[this] val virtualHeartbeatTasks: java.util.Collection[TaskStatus] = Seq(fakeHeartbeatStatus).asJava
 
     override def onSkip(): Unit = {
       log.debug("Prompting mesos for a heartbeat via explicit task reconciliation")
@@ -62,11 +56,13 @@ class MesosHeartbeatMonitor @Inject() (
     driver: SchedulerDriver,
     frameworkId: FrameworkID,
     master: MasterInfo): Unit = {
+    log.debug("registered heartbeat monitor")
     heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), sessionOf(driver))
     scheduler.registered(driver, frameworkId, master)
   }
 
   override def reregistered(driver: SchedulerDriver, master: MasterInfo): Unit = {
+    log.debug("reregistered heartbeat monitor")
     heartbeatActor ! Heartbeat.MessageActivate(heartbeatReactor(driver), sessionOf(driver))
     scheduler.reregistered(driver, master)
   }
@@ -83,8 +79,21 @@ class MesosHeartbeatMonitor @Inject() (
 
   override def statusUpdate(driver: SchedulerDriver, status: TaskStatus): Unit = {
     heartbeatActor ! Heartbeat.MessagePulse
-    scheduler.statusUpdate(driver, status)
+
+    // filter TASK-LOST updates for our fake tasks to avoid cluttering the logs
+    if (!isFakeHeartbeatUpdate(status)) {
+      scheduler.statusUpdate(driver, status)
+    } else {
+      log.info("received fake heartbeat task-status update")
+    }
   }
+
+  protected[marathon] def isFakeHeartbeatUpdate(status: TaskStatus): Boolean =
+    status.getState == TaskState.TASK_LOST &&
+      status.hasSource && status.getSource == TaskStatus.Source.SOURCE_MASTER &&
+      status.hasReason && status.getReason == TaskStatus.Reason.REASON_RECONCILIATION &&
+      status.hasSlaveId && status.getSlaveId.getValue.startsWith(FAKE_AGENT_PREFIX) &&
+      status.hasTaskId && status.getTaskId.getValue.startsWith(FAKE_TASK_PREFIX)
 
   override def frameworkMessage(
     driver: SchedulerDriver,
@@ -98,6 +107,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def disconnected(driver: SchedulerDriver): Unit = {
     // heartbeatReactor may have triggered this, but that's ok because if it did then
     // it's already "inactive", so this becomes a no-op
+    log.debug("disconnected heartbeat monitor")
     heartbeatActor ! Heartbeat.MessageDeactivate(sessionOf(driver))
     scheduler.disconnected(driver)
   }
@@ -119,6 +129,7 @@ class MesosHeartbeatMonitor @Inject() (
   override def error(driver: SchedulerDriver, message: String): Unit = {
     // errors from the driver are fatal (to the driver) so it should be safe to deactivate here because
     // the marathon scheduler **should** either exit or else create a new driver instance and reregister.
+    log.debug("errored heartbeat monitor")
     heartbeatActor ! Heartbeat.MessageDeactivate(sessionOf(driver))
     scheduler.error(driver, message)
   }
@@ -130,10 +141,20 @@ object MesosHeartbeatMonitor {
   final val DEFAULT_HEARTBEAT_INTERVAL_MS = 15000L
   final val DEFAULT_HEARTBEAT_FAILURE_THRESHOLD = 5
 
+  final val FAKE_TASK_PREFIX = "fake-marathon-pacemaker-task-"
+  final val FAKE_AGENT_PREFIX = "fake-marathon-pacemaker-agent-"
+
   // @return a uniquely identifying token for the current session
   def sessionOf(driver: SchedulerDriver): AnyRef =
     // a new driver is instantiated for each session already so we can just use the driver instance
     // as the session token. it feels a bit hacky but does the job. would rather hack this in one place
     // vs everywhere else that wants the session token.
     driver
+
+  protected[marathon] def fakeHeartbeatStatus =
+    TaskStatus.newBuilder
+      .setTaskId(TaskID.newBuilder.setValue(FAKE_TASK_PREFIX + UUID.randomUUID().toString))
+      .setState(TaskState.TASK_LOST) // required, so we just need to set something
+      .setSlaveId(SlaveID.newBuilder.setValue(FAKE_AGENT_PREFIX + UUID.randomUUID().toString))
+      .build
 }
