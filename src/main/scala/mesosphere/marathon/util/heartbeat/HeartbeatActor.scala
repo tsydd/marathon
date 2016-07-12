@@ -17,6 +17,7 @@ class HeartbeatActor(config: Heartbeat.Config) extends LoggingFSM[HeartbeatInter
 
   when(StateInactive) {
     case Event(MessageActivate(reactor, token), DataNone) =>
+      log.debug("heartbeat activated")
       goto(StateActive) using DataActive(reactor, token)
     case _ =>
       stay // swallow all other event types
@@ -38,12 +39,14 @@ class HeartbeatActor(config: Heartbeat.Config) extends LoggingFSM[HeartbeatInter
     case Event(MessageDeactivate(token), data: DataActive) =>
       // only deactivate if token == data.sessionToken
       if (token.eq(data.sessionToken)) {
+        log.debug("heartbeat deactivated")
         goto(StateInactive) using DataNone
       } else {
         stay
       }
 
     case Event(MessageActivate(newReactor, newToken), data: DataActive) =>
+      log.debug("heartbeat re-activated")
       stay using DataActive(reactor = newReactor, sessionToken = newToken)
   }
 
@@ -52,6 +55,8 @@ class HeartbeatActor(config: Heartbeat.Config) extends LoggingFSM[HeartbeatInter
       log.warning("unhandled event {} in state {}/{}", e, stateName, d)
       stay
   }
+
+  log.debug("starting heartbeat actor")
 
   initialize()
 }

@@ -20,7 +20,7 @@ object MarathonSchedulerDriver {
     newScheduler: Scheduler,
     frameworkId: Option[FrameworkID]): SchedulerDriver = {
 
-    log.info(s"Create new Scheduler Driver with frameworkId: $frameworkId")
+    log.info(s"Create new Scheduler Driver with frameworkId: $frameworkId and scheduler $newScheduler")
 
     val frameworkInfoBuilder = FrameworkInfo.newBuilder()
       .setName(config.frameworkName())

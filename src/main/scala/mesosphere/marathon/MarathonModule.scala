@@ -83,7 +83,6 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
       .annotatedWith(Names.named(MesosHeartbeatMonitor.BASE))
       .to(classOf[MarathonScheduler])
       .in(Scopes.SINGLETON)
-    bind(classOf[MarathonScheduler]).in(Scopes.SINGLETON)
 
     bind(classOf[MarathonSchedulerDriverHolder]).in(Scopes.SINGLETON)
     bind(classOf[SchedulerDriverFactory]).to(classOf[MesosSchedulerDriverFactory]).in(Scopes.SINGLETON)
